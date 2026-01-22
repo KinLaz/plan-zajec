@@ -21,11 +21,12 @@
 
   body { font-family: Arial, sans-serif; margin: 0; overflow: hidden; background:#f6f6f6; }
   .layout { display: flex; gap: 14px; align-items: flex-start; height: 100vh; }
+  
 
   .sidebar {
     width: 12vw;
-    min-width: 240px;
-    max-width: 250px;
+    min-width: 180px;
+    max-width: none;
     flex: 0 0 auto;
     padding: 10px 0 10px 10px;
 
@@ -225,7 +226,7 @@
   .weekbar .title{
     font-size:18px; font-weight:800;
   }
-  
+
   /* ===== DRUK ===== */
   @media print {
 
@@ -262,13 +263,109 @@
   /* tabela: najlepiej do druku */
   table { min-width: 0 !important; }
   th, td { font-size: 10px !important; }
-}
+  }
 
+  /* ===== LAPTOPY ===== */
+  @media (max-width: 1400px) {
+  .main { min-width: 0; }
+  }
+
+  /* ===== Mobile ===== */
+  @media (max-width: 900px) {
+  .sidebar {
+    width: 180px;
+    padding: 10px 0 10px 8px;
+  }
+  .main { min-width: 0; }
+  }
   
+  
+  /* ===== TELEFON: sidebar jako wysuwany panel ===== */
+  @media (max-width: 700px) {
+  .layout { gap: 0; }
+
+  /* main ma pełną szerokość */
+  .main { min-width: 0; padding: 12px; }
+
+  /* sidebar domyślnie ukryty poza ekranem */
+  .sidebar{
+    position: fixed;
+    left: 0;
+    top: 0;
+    height: 100vh;
+    width: 78vw;
+    max-width: 320px;
+    min-width: 0;
+    padding: 10px;
+    background: #fff;
+    z-index: 9998;
+    transform: translateX(-110%);
+    transition: transform .2s ease;
+    box-shadow: 0 10px 30px rgba(0,0,0,.25);
+  }
+
+  /* po otwarciu */
+  body.sidebar-open .sidebar{
+    transform: translateX(0);
+  }
+
+  /* przyciemnienie tła */
+  .backdrop{
+    display:none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.25);
+    z-index: 9997;
+  }
+  body.sidebar-open .backdrop{
+    display:block;
+  }
+
+  /* mniejsze przyciski w górnym pasku na telefonie */
+  button { padding: 6px 8px; }
+  }
+
+  #toggleFilters { display: none; }
+  @media (max-width: 700px) {
+  #toggleFilters { display: inline-block; }
+  }
+  
+  
+  /* ===== TELEFON – TRYB COMPACT ===== */
+  @media (max-width: 600px) {
+
+  /* węższe kolumny nauczycieli */
+  :root{
+    --teacher-w: 95px;
+    --time-w: 48px;
+  }
+
+  th, td {
+    font-size: 11px;
+    padding: 4px;
+  }
+
+  .th-teacher .t-name  { font-size: 11px; }
+  .th-teacher .t-title { font-size: 9px; }
+
+  .cell-event {
+    padding: 4px;
+  }
+
+  .cell-event .t1 { font-size: 11px; }
+  .cell-event .t2,
+  .cell-event .t3 { font-size: 9px; }
+
+  }
+  
+  
+
+
 </style>
 </head>
 
 <body>
+<div class="backdrop" id="backdrop"></div>
 <div class="layout">
 
   <div class="sidebar">
@@ -309,6 +406,7 @@
           <button id="prevWeek">◀</button>
           <button id="nextWeek">▶</button>
           <button id="thisWeek">Bieżący</button>
+          <button id="toggleFilters">☰ Filtry</button>
           <button id="printBtn">🖨 Drukuj</button>
         </div>
       </div>
@@ -685,6 +783,21 @@ renderTable();
 
 window.addEventListener("scroll", hideTooltip);
 window.addEventListener("resize", hideTooltip);
+
+const toggleFiltersBtn = document.getElementById("toggleFilters");
+const backdrop = document.getElementById("backdrop");
+
+function closeSidebar(){
+  document.body.classList.remove("sidebar-open");
+}
+function toggleSidebar(){
+  document.body.classList.toggle("sidebar-open");
+}
+
+if (toggleFiltersBtn) toggleFiltersBtn.onclick = toggleSidebar;
+if (backdrop) backdrop.onclick = closeSidebar;
+
+
 </script>
 </body>
 </html>
