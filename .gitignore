@@ -1,7 +1,22 @@
 .venv/
+<<<<<<< HEAD
+=======
+.idea/
+>>>>>>> 0589daf (Initial plan page)
 __pycache__/
 *.pyc
 *.log
 *.tmp
 *.csv
+<<<<<<< HEAD
 plan_master.json
+=======
+*.ics
+
+# ignoruj wszystko
+*
+
+# ALE zostaw te pliki:
+!index.html
+!.gitignore
+>>>>>>> 0589daf (Initial plan page)
