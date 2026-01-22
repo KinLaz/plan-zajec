@@ -20,3 +20,4 @@ plan_master.json
 !index.html
 !.gitignore
 >>>>>>> 0589daf (Initial plan page)
+git push -u origin main
