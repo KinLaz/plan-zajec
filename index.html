@@ -196,8 +196,9 @@
 
   .cell-event .t1 { font-weight:550; }
   .cell-event .t2, .cell-event .t3 { font-size: 10px; opacity: 0.85; margin-top: 2px; }
-  .cell-event.zn{ background: #f0f6ff; border-color: #6b8fd6; }
-  .cell-event.ln{ background: #ffe5e5; border-color: #6b8fd6; }
+  .cell-event.zn{ background: #e8f2ff; border-color: #6b8fd6; }
+  .cell-event.ln{ background: #ffeaea; border-color: #d66b6b; }
+  .cell-event.ls{ background: #eaf7ea; border-color: #6bad6b; }
 
   .tooltip {
     position:fixed; z-index:999999; max-width:520px;
@@ -312,6 +313,7 @@
     }
   }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 </head>
 
 <body>
@@ -361,6 +363,7 @@
           <button id="zoomReset" title="Reset zoom">100%</button>
           <button id="zoomIn" title="Powiększ">+</button>
           <button id="printBtn">🖨 Drukuj</button>
+          <button id="exportXlsxBtn">📥 Eksport do Excel</button>
         </div>
       </div>
     </div>
@@ -514,8 +517,15 @@ function eventMatchesSlot(e, slotStartHHMM, slotEndHHMM) {
 
 function isZN(e){
   if (e.is_zn === true) return true;
-  const g = (e.group || "");
-  return g.includes("ZN");
+  return (e.group || "").includes("ZN");
+}
+function isLN(e){ return (e.group || "").includes("LN"); }
+function isLS(e){ return (e.group || "").includes("LS"); }
+function groupClass(e){
+  if (isZN(e)) return "zn";
+  if (isLN(e)) return "ln";
+  if (isLS(e)) return "ls";
+  return "";
 }
 
 function slotStartMin(i){ return hhmmToMin(SLOTS[i][0]); }
@@ -681,7 +691,7 @@ function renderTable() {
             `<div><b>Tygodnie:</b> ${escHtml(e.weeks_all_txt || "-")}</div>` +
             `<div><b>Uwagi:</b> ${escHtml(e.notes || "-")}</div>`;
 
-          const znClass = isZN(e) ? "zn" : "";
+          const znClass = groupClass(e);
           return `
             <div class="cell-event ${znClass}"
                  onmousemove="showTooltip(event, this.getAttribute('data-tip'))"
@@ -741,6 +751,122 @@ document.getElementById("selectNone").onclick = () => {
   renderTable();
 };
 document.getElementById("printBtn").onclick = () => window.print();
+
+/* ===== EKSPORT AKTUALNEGO WIDOKU DO XLSX ===== */
+function isoWeekNumber(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+}
+
+function groupFillColor(text) {
+  for (const line of text.split(/\n/)) {
+    const t = line.trim();
+    if (t.endsWith("ZN")) return "FFE8F2FF"; // pastelowy niebieski
+    if (t.endsWith("LN")) return "FFFFEAEA"; // pastelowy różowy/czerwony
+    if (t.endsWith("LS")) return "FFEAF7EA"; // pastelowy zielony
+  }
+  return null;
+}
+
+document.getElementById("exportXlsxBtn").onclick = async function() {
+  const table = tableWrap.querySelector("table");
+  if (!table) { alert("Brak tabeli do eksportu."); return; }
+
+  const monday = toDate(weekInput.value);
+  const weekNum = isoWeekNumber(monday);
+  const kat = (katSelect.value || "ALL").replace(/[^A-Za-z0-9_-]/g, "_");
+  const today = new Date();
+  const dateStr = today.getFullYear() + "-" +
+    String(today.getMonth()+1).padStart(2,"0") + "-" +
+    String(today.getDate()).padStart(2,"0");
+  const filename = `plan_W${weekNum}_${kat}_${dateStr}.xlsx`;
+
+  // --- odczyt DOM tabeli do siatki (obsługa rowspan/colspan) ---
+  const domRows = table.querySelectorAll("tr");
+  const numRows = domRows.length;
+  const grid = Array.from({ length: numRows }, () => ({}));
+  let colCount = 0;
+
+  domRows.forEach((tr, r) => {
+    const isHeader   = !!tr.closest("thead");
+    const isDayStart = tr.classList.contains("day-start");
+    let c = 0;
+    tr.querySelectorAll("th, td").forEach(cell => {
+      while (grid[r][c]) c++;
+      const rowspan = parseInt(cell.getAttribute("rowspan") || "1");
+      const colspan = parseInt(cell.getAttribute("colspan") || "1");
+      grid[r][c] = { value: cell.innerText.trim(), rowspan, colspan, isHeader, isDayStart, isFixed: c <= 2 };
+      for (let dr = 0; dr < rowspan; dr++) {
+        for (let dc = 0; dc < colspan; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          grid[r + dr][c + dc] = { skip: true };
+        }
+      }
+      c += colspan;
+      colCount = Math.max(colCount, c);
+    });
+  });
+
+  // --- ExcelJS workbook ---
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("Plan");
+
+  // szerokości kolumn
+  const colDefs = [];
+  for (let c = 0; c < colCount; c++) {
+    if      (c === 0) colDefs.push({ width: 4  });
+    else if (c === 1) colDefs.push({ width: 5  });
+    else if (c === 2) colDefs.push({ width: 12 });
+    else              colDefs.push({ width: 28 });
+  }
+  ws.columns = colDefs;
+
+  // border helpers (argb = alpha + rgb, FF = pełny kolor)
+  const thin   = { style: "thin",   color: { argb: "FFBBBBBB" } };
+  const medium = { style: "medium", color: { argb: "FF333333" } };
+
+  // wstawianie wierszy i styli
+  for (let r = 0; r < numRows; r++) {
+    const wsRow = ws.getRow(r + 1);
+    wsRow.height = r === 0 ? 36 : 52;
+
+    for (let c = 0; c < colCount; c++) {
+      const cd = grid[r][c];
+      if (!cd || cd.skip) continue;
+
+      const cell = ws.getCell(r + 1, c + 1);
+      cell.value = cd.value || "";
+
+      if (cd.rowspan > 1 || cd.colspan > 1) {
+        ws.mergeCells(r + 1, c + 1, r + cd.rowspan, c + cd.colspan);
+      }
+
+      cell.border    = { top: cd.isDayStart ? medium : thin, bottom: thin, left: thin, right: thin };
+      cell.alignment = { wrapText: true, vertical: "middle", horizontal: "center" };
+      cell.font      = cd.isHeader
+        ? { name: "Arial", bold: true, size: 11 }
+        : { name: "Arial", size: 9 };
+      if (cd.isHeader) {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFECECEC" } };
+      } else if (cd.isFixed) {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF7F7F7" } };
+      } else {
+        const argb = groupFillColor(cd.value);
+        if (argb) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb } };
+      }
+    }
+  }
+
+  // download
+  const buf = await wb.xlsx.writeBuffer();
+  const a   = document.createElement("a");
+  a.href    = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
 
 katSelect.onchange = () => { renderTeacherList(); renderTable(); };
 teacherList.addEventListener("change", () => renderTable());
